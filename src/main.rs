@@ -1,5 +1,8 @@
 use clap::{Args, Parser, Subcommand};
+use hills::application::Application;
 use hills::config::Config;
+use hills::docker_compose::DockerCompose;
+use std::fs;
 use std::path::Path;
 
 #[derive(Parser)]
@@ -25,6 +28,9 @@ enum Actions {
 
     /// Create an alias for the application.
     Alias(AliasArgs),
+
+    /// Update the application.
+    Update(UpdateArgs),
 }
 
 #[derive(Args, Debug)]
@@ -38,20 +44,37 @@ struct AliasArgs {
     alias: Option<String>,
 }
 
+#[derive(Args, Debug)]
+struct UpdateArgs {
+    name: String,
+}
+
 fn main() {
     let cli = Cli::parse();
     let root = Path::new(&cli.context);
-    println!("root {:?}", root.to_str());
 
     match cli.action {
         Actions::Init => {
             Config::create(root);
         }
         Actions::New(args) => {
-            Config::load_from(root);
+            let c = Config::load_from(root);
+
+            if !c.app_root().exists() {
+                fs::create_dir_all(*c.app_root()).unwrap();
+            }
+
+            Application::create(&c, &args.name);
         }
         Actions::Alias(args) => {
             println!("Alias: {:?}", args);
+        }
+        Actions::Update(args) => {
+            let c = Config::load_from(root);
+            let app = Application::find_by(&c, &args.name);
+            let compose = DockerCompose::new(&app);
+
+            compose.sync();
         }
     }
 }
