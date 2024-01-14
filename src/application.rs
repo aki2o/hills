@@ -27,6 +27,10 @@ impl Application<'_> {
     return Box::new(self.config.root().join(&self.values.path.as_ref().unwrap()));
   }
 
+  pub fn domain(&self) -> String {
+    return format!("{}.{}", self.name.as_str(), self.config.project_name());
+  }
+
   pub fn is_exists(conf: &Config, name: &str) -> bool {
     return Self::file_path(conf, name).exists();
   }

@@ -92,7 +92,12 @@ impl DockerCompose<'_> {
 
       if on_ports {
         if l.trim().starts_with("-") {
-          // https://docs.docker.com/compose/environment-variables/env-file/
+          // [NOTE]
+          //   Removing the expose part.
+          //   It's necessary to consider for embedded environment variable.
+          //   https://docs.docker.com/compose/environment-variables/env-file/
+          //
+          // TODO: To support longsyntax format
           let re = Regex::new(r#"^(\s+-\s+['"]?).+:([^-?+])"#).unwrap();
 
           // Removing a part of exposing port to host
@@ -122,6 +127,7 @@ impl DockerCompose<'_> {
   fn create_override(&self, file: Box<PathBuf>) {
     let yaml = docker_compose::load(file);
     let dns = self.app.config.dns();
+    let dhcp = dns.new_dhcp_for(self.app);
 
     let orig_services = yaml.services.unwrap_or(BTreeMap::new());
     // let orig_networks = yaml.networks.unwrap_or(BTreeMap::new());
@@ -135,10 +141,11 @@ impl DockerCompose<'_> {
         dns.name.clone(),
         docker_compose::Network {
           external: None,
-          ipv4_address: Some(dns.assign(self.app, orig_name)),
+          ipv4_address: Some(dhcp.assign(orig_name)),
           aliases: None,
         },
       );
+      // TODO: To support the case when networks is configured in original
       nw.insert(
         "default".to_string(),
         docker_compose::Network {

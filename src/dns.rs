@@ -1,5 +1,6 @@
 use crate::application::Application;
 use crate::config;
+use crate::dhcp;
 use crate::docker_compose;
 use ipnet::{IpAdd, Ipv4Net};
 use std::collections::BTreeMap;
@@ -29,8 +30,12 @@ impl Dns {
     return self.subnet.addr().saturating_add(2);
   }
 
-  pub fn assign(&self, app: &Application, service: &str) -> Ipv4Addr {
-    return self.subnet.addr().saturating_add(3);
+  pub fn new_dhcp_for(&self, app: &Application) -> dhcp::Dhcp {
+    return dhcp::new(app.domain(), self.find_or_create_subnet_for(app));
+  }
+
+  fn find_or_create_subnet_for(&self, app: &Application) -> Ipv4Net {
+    return *self.subnet.subnets(24).unwrap().collect::<Vec<Ipv4Net>>().first().unwrap();
   }
 
   pub fn ensure_docker_compose(&self) {
@@ -61,7 +66,7 @@ impl Dns {
           context: Some(".".to_string()),
           dockerfile: Some("unbound.Dockerfile".to_string()),
         }),
-        volumes: Some(vec!["./unbound_conf.d:/etc/unbound/unbound.conf.d".to_string()]),
+        volumes: Some(vec!["./unbound.conf.d:/etc/unbound/unbound.conf.d".to_string()]),
         ports: Some(vec!["53:53".to_string(), "53:53/udp".to_string()]),
         networks: Some(docker_compose::ServiceNetworkable::Map(service_networks)),
         dns: None,
