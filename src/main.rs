@@ -1,7 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use hills::application::Application;
 use hills::config::Config;
-use hills::dns;
 use std::fs;
 use std::path::Path;
 
@@ -75,7 +74,7 @@ fn main() {
 
       app.docker_compose().sync();
 
-      dns::new(&c).ensure_docker_compose();
+      c.dns().ensure_docker_compose();
     }
   }
 }

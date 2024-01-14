@@ -1,37 +1,54 @@
-use crate::config::Config;
+use crate::application::Application;
+use crate::config;
 use crate::docker_compose;
+use ipnet::{IpAdd, Ipv4Net};
 use std::collections::BTreeMap;
 use std::fs;
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 
-pub struct Dns<'a> {
-  config: &'a Config,
+pub struct Dns {
+  pub name: String,
+  subnet: Ipv4Net,
 }
 
-pub fn new<'a>(config: &'a Config) -> Dns<'a> {
-  return Dns { config: config };
+pub fn new(name: String, subnet: Ipv4Net) -> Dns {
+  return Dns { name: name, subnet: subnet };
 }
 
-impl Dns<'_> {
+pub fn root() -> Box<PathBuf> {
+  return Box::new(config::global_dir_path().join("dns"));
+}
+
+pub fn global_addr() -> Ipv4Addr {
+  return Ipv4Addr::new(8, 8, 8, 8);
+}
+
+impl Dns {
+  pub fn addr(&self) -> Ipv4Addr {
+    return self.subnet.addr().saturating_add(2);
+  }
+
+  pub fn assign(&self, app: &Application, service: &str) -> Ipv4Addr {
+    return self.subnet.addr().saturating_add(3);
+  }
+
   pub fn ensure_docker_compose(&self) {
-    let dir = Config::global_dir_path().join("dns");
+    let dir = root();
 
     if !dir.exists() {
-      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+      fs::create_dir_all(*dir.clone()).expect(&format!("Failed to create {:?}", dir));
     }
-
-    let network_name = "hills";
-    let ipv4_address = Ipv4Addr::new(172, 31, 0, 2);
 
     let mut services: BTreeMap<String, docker_compose::Service> = BTreeMap::new();
     let mut networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
     let mut service_networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
 
     service_networks.insert(
-      network_name.to_string(),
+      self.name.clone(),
       docker_compose::Network {
         external: None,
-        ipv4_address: Some(ipv4_address),
+        ipv4_address: Some(self.addr().clone()),
         aliases: None,
       },
     );
@@ -54,7 +71,7 @@ impl Dns<'_> {
     );
 
     networks.insert(
-      network_name.to_string(),
+      self.name.clone(),
       docker_compose::Network {
         external: Some(true),
         ipv4_address: None,

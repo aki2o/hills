@@ -22,7 +22,7 @@ pub struct Service {
   pub volumes: Option<Vec<String>>,
   pub ports: Option<Vec<String>>,
   pub networks: Option<ServiceNetworkable>,
-  pub dns: Option<Vec<String>>,
+  pub dns: Option<Vec<Ipv4Addr>>,
   pub tty: Option<String>,
   pub stdin_open: Option<String>,
 }

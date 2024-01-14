@@ -1,4 +1,5 @@
 use crate::application::Application;
+use crate::dns;
 use crate::docker_compose;
 use regex::Regex;
 use std::collections::BTreeMap;
@@ -120,19 +121,40 @@ impl DockerCompose<'_> {
 
   fn create_override(&self, file: Box<PathBuf>) {
     let yaml = docker_compose::load(file);
+    let dns = self.app.config.dns();
 
     let orig_services = yaml.services.unwrap_or(BTreeMap::new());
-    let orig_networks = yaml.networks.unwrap_or(BTreeMap::new());
+    // let orig_networks = yaml.networks.unwrap_or(BTreeMap::new());
 
     let mut services: BTreeMap<String, docker_compose::Service> = BTreeMap::new();
     for (name, service) in orig_services.iter() {
+      let orig_name = service.container_name.as_ref().unwrap_or(name);
+
+      let mut nw: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
+      nw.insert(
+        dns.name.clone(),
+        docker_compose::Network {
+          external: None,
+          ipv4_address: Some(dns.assign(self.app, orig_name)),
+          aliases: None,
+        },
+      );
+      nw.insert(
+        "default".to_string(),
+        docker_compose::Network {
+          external: None,
+          ipv4_address: None,
+          aliases: Some(vec![orig_name.to_string()]),
+        },
+      );
+
       let s = docker_compose::Service {
-        container_name: Some(format!("{}-{}", self.app.name.clone(), name.clone())),
+        container_name: Some(format!("{}-{}", self.app.name.clone(), orig_name)),
         build: None,
         volumes: None,
         ports: None,
-        networks: None,
-        dns: None,
+        networks: Some(docker_compose::ServiceNetworkable::Map(nw)),
+        dns: Some(vec![dns.addr(), dns::global_addr()]),
         tty: None,
         stdin_open: None,
       };
@@ -140,10 +162,21 @@ impl DockerCompose<'_> {
       services.insert(name.clone(), s);
     }
 
+    let mut networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
+
+    networks.insert(
+      dns.name.clone(),
+      docker_compose::Network {
+        external: Some(true),
+        ipv4_address: None,
+        aliases: None,
+      },
+    );
+
     let yaml = docker_compose::Yaml {
       version: None,
       services: Some(services),
-      networks: None,
+      networks: Some(networks),
     };
 
     yaml.save(Box::new(self.dist_root().join("override.yml")));
