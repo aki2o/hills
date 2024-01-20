@@ -18,7 +18,13 @@ pub fn new(name: String, subnet: Ipv4Net) -> Dns {
 }
 
 pub fn root() -> Box<PathBuf> {
-  return Box::new(config::global_dir_path().join("dns"));
+  let dir = config::global_dir_path().join("dns");
+
+  if !dir.exists() {
+    fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+  }
+
+  return Box::new(dir);
 }
 
 pub fn global_addr() -> Ipv4Addr {
@@ -34,17 +40,19 @@ impl Dns {
     return dhcp::new(app.domain(), self.find_or_create_subnet_for(app));
   }
 
-  fn find_or_create_subnet_for(&self, app: &Application) -> Ipv4Net {
-    return *self.subnet.subnets(24).unwrap().collect::<Vec<Ipv4Net>>().first().unwrap();
+  pub fn update_config(&self, app: &Application, value: String) {
+    let dir = root().join("unbound.conf.d");
+
+    if !dir.exists() {
+      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+    }
+
+    let file = dir.join(format!("{}.conf", app.full_name()));
+
+    config::create_file(Box::new(file), value);
   }
 
   pub fn ensure_docker_compose(&self) {
-    let dir = root();
-
-    if !dir.exists() {
-      fs::create_dir_all(*dir.clone()).expect(&format!("Failed to create {:?}", dir));
-    }
-
     let mut services: BTreeMap<String, docker_compose::Service> = BTreeMap::new();
     let mut networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
     let mut service_networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
@@ -90,6 +98,34 @@ impl Dns {
       networks: Some(networks),
     };
 
-    yaml.save(Box::new(dir.join("docker-compose.yml")));
+    yaml.save(Box::new(root().join("docker-compose.yml")));
+  }
+
+  fn find_or_create_subnet_for(&self, app: &Application) -> Ipv4Net {
+    let file = root().join("subnets.toml");
+    let key = app.full_name();
+    let mut subnets: BTreeMap<String, Ipv4Net> = BTreeMap::new();
+
+    if file.exists() {
+      let s = fs::read_to_string(file.clone()).expect(&format!("Failed to read {:?}", file));
+      subnets = toml::from_str(&s).expect(&format!("Failed to load config from {:?}", file));
+    }
+
+    return match subnets.get(&key) {
+      Some(v) => v.clone(),
+      None => {
+        let subnet = self
+          .subnet
+          .subnets(24)
+          .unwrap()
+          .find(|s| !self.subnet.addr().eq(&s.addr()) && !subnets.values().any(|v| v.eq(s)))
+          .expect("Not found avaiable subnet! Please run stop --all"); // TODO
+
+        subnets.insert(key, subnet.clone());
+        config::create_file(Box::new(file), toml::to_string(&subnets).unwrap());
+
+        return subnet;
+      }
+    };
   }
 }

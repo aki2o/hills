@@ -1,4 +1,5 @@
 use crate::application::Application;
+use crate::dhcp;
 use crate::dns;
 use crate::docker_compose;
 use regex::Regex;
@@ -41,7 +42,10 @@ impl DockerCompose<'_> {
       }
     });
 
-    self.create_override(Box::new(new_file));
+    let dhcp = self.create_override(Box::new(new_file));
+    let dns = self.app.config.dns();
+
+    dns.update_config(self.app, dhcp.dns_config());
   }
 
   fn dist_root(&self) -> Box<PathBuf> {
@@ -124,10 +128,10 @@ impl DockerCompose<'_> {
     return Some(Box::new(path));
   }
 
-  fn create_override(&self, file: Box<PathBuf>) {
+  fn create_override(&self, file: Box<PathBuf>) -> dhcp::Dhcp {
     let yaml = docker_compose::load(file);
     let dns = self.app.config.dns();
-    let dhcp = dns.new_dhcp_for(self.app);
+    let mut dhcp = dns.new_dhcp_for(self.app);
 
     let orig_services = yaml.services.unwrap_or(BTreeMap::new());
     // let orig_networks = yaml.networks.unwrap_or(BTreeMap::new());
@@ -187,5 +191,7 @@ impl DockerCompose<'_> {
     };
 
     yaml.save(Box::new(self.dist_root().join("override.yml")));
+
+    return dhcp;
   }
 }

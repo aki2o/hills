@@ -1,7 +1,6 @@
 use crate::dns::{self, Dns};
 use garde::Validate;
 use ipnet::Ipv4Net;
-use path_absolutize::*;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
@@ -23,12 +22,20 @@ struct GlobalValues {
 
 #[derive(Serialize, Deserialize, Validate)]
 struct LocalValues {
-  /// This should be unique in global. The default is the name of the directory.
-  #[garde(required, length(min = 1))]
-  project_name: Option<String>,
+  /// The root domain name of project. It's optional to set if you'd like to make sure the FQDN values are unique in global.
+  #[garde(skip)]
+  domain: Option<String>,
   /// The relative path to applications directory from root.
   #[garde(required, length(min = 1))]
   app_root: Option<String>,
+}
+
+pub fn create_file(f: Box<PathBuf>, s: String) {
+  let error_message = format!("Failed to write {:?}", f);
+  let mut fs = File::create(*f.clone()).expect(&error_message);
+  write!(fs, "{}", s).expect(&error_message);
+  fs.flush().expect(&error_message);
+  println!("Created {:?}", f);
 }
 
 pub fn global_dir_path() -> Box<PathBuf> {
@@ -43,20 +50,22 @@ fn local_file_path(root: &Path) -> Box<PathBuf> {
   return Box::new(root.join("Hills.toml"));
 }
 
-fn create_file(f: Box<PathBuf>, s: String) {
-  let error_message = format!("Failed to write {:?}", f);
-  let mut fs = File::create(*f).expect(&error_message);
-  write!(fs, "{}", s).expect(&error_message);
-  fs.flush().expect(&error_message);
-}
-
 impl Config {
   pub fn root(&self) -> Box<PathBuf> {
     return Box::new(self.path.parent().unwrap().to_path_buf());
   }
 
-  pub fn project_name(&self) -> &str {
-    return self.local_values.project_name.as_ref().unwrap();
+  pub fn domain(&self) -> Option<String> {
+    match &self.local_values.domain {
+      Some(v) => {
+        if v.trim().eq("") {
+          None
+        } else {
+          Some(v.trim().to_string())
+        }
+      }
+      None => None,
+    }
   }
 
   pub fn app_root(&self) -> Box<PathBuf> {
@@ -107,7 +116,7 @@ impl Config {
     create_file(global_file_path(), toml::to_string(&v).unwrap());
 
     let v = LocalValues {
-      project_name: Some(root.absolutize().unwrap().file_name().unwrap().to_str().unwrap().to_string()),
+      domain: Some("".to_string()),
       app_root: Some("applications".to_string()),
     };
 
