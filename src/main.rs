@@ -89,8 +89,6 @@ fn main() {
       let app = application::find_by(&c, &args.name);
 
       app.update(false);
-
-      c.dns().ensure_docker_compose();
     }
   }
 }

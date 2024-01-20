@@ -17,6 +17,10 @@ pub fn new(name: String, subnet: Ipv4Net) -> Dns {
   return Dns { name: name, subnet: subnet };
 }
 
+pub fn global_addr() -> Ipv4Addr {
+  return Ipv4Addr::new(8, 8, 8, 8);
+}
+
 pub fn root() -> Box<PathBuf> {
   let dir = config::global_dir_path().join("dns");
 
@@ -27,8 +31,22 @@ pub fn root() -> Box<PathBuf> {
   return Box::new(dir);
 }
 
-pub fn global_addr() -> Ipv4Addr {
-  return Ipv4Addr::new(8, 8, 8, 8);
+fn config_root() -> Box<PathBuf> {
+  let dir = root().join("unbound.conf.d");
+
+  if !dir.exists() {
+    fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+  }
+
+  return Box::new(dir);
+}
+
+fn docker_compose_path() -> Box<PathBuf> {
+  return Box::new(root().join("docker-compose.yml"));
+}
+
+fn base_config_path() -> Box<PathBuf> {
+  return Box::new(config_root().join("base.conf"));
 }
 
 impl Dns {
@@ -40,19 +58,31 @@ impl Dns {
     return dhcp::new(app.domain(), self.find_or_create_subnet_for(app));
   }
 
-  pub fn update_config(&self, app: &Application, value: String) {
-    let dir = root().join("unbound.conf.d");
-
-    if !dir.exists() {
-      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+  pub fn setup(&self) {
+    if !docker_compose_path().exists() {
+      self.create_docker_compose();
     }
 
-    let file = dir.join(format!("{}.conf", app.full_name()));
+    if !base_config_path().exists() {
+      self.create_base_config();
+    }
+  }
+
+  pub fn update_config(&self, app: &Application, value: String) {
+    let file = config_root().join(format!("{}.conf", app.full_name()));
 
     config::create_file(Box::new(file), value);
   }
 
-  pub fn ensure_docker_compose(&self) {
+  pub fn clear() {
+    let dir = root();
+
+    if dir.exists() {
+      fs::remove_dir_all(*dir.clone()).expect(&format!("Failed to remove {:?}", dir));
+    }
+  }
+
+  fn create_docker_compose(&self) {
     let mut services: BTreeMap<String, docker_compose::Service> = BTreeMap::new();
     let mut networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
     let mut service_networks: BTreeMap<String, docker_compose::Network> = BTreeMap::new();
@@ -98,7 +128,24 @@ impl Dns {
       networks: Some(networks),
     };
 
-    yaml.save(Box::new(root().join("docker-compose.yml")));
+    yaml.save(docker_compose_path());
+  }
+
+  fn create_base_config(&self) {
+    let s = r#"server:
+  verbosity: 3
+  use-syslog: no
+  logfile: ""
+
+  interface: 0.0.0.0
+  interface: ::0
+  access-control: 0.0.0.0/0 allow
+
+  local-zone: "local." transparent
+"#
+    .to_string();
+
+    config::create_file(base_config_path(), s);
   }
 
   fn find_or_create_subnet_for(&self, app: &Application) -> Ipv4Net {

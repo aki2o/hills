@@ -27,11 +27,13 @@ impl Dhcp {
   }
 
   pub fn dns_config(&self) -> String {
-    return self
+    let local_data_part = self
       .services
       .keys()
-      .map(|s| format!("local-data: \"{}.{}.local. A {}\"\n", s, self.domain, self.services.get(s).unwrap()))
+      .map(|s| format!("  local-data: \"{}.{}.local. A {}\"\n", s, self.domain, self.services.get(s).unwrap()))
       .collect::<Vec<String>>()
       .join("");
+
+    return format!("server:\n{}", local_data_part);
   }
 }

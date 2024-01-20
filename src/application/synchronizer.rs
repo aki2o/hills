@@ -10,21 +10,30 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::Command;
 
-pub struct DockerCompose<'a> {
+pub struct Synchronizer<'a> {
   app: &'a Application<'a>,
   original_hash: Option<String>,
 }
 
-pub fn new<'a>(app: &'a Application<'a>) -> DockerCompose<'a> {
-  return DockerCompose { app: app, original_hash: None };
+pub fn new<'a>(app: &'a Application<'a>) -> Synchronizer<'a> {
+  return Synchronizer { app: app, original_hash: None };
 }
 
-impl DockerCompose<'_> {
+impl Synchronizer<'_> {
   pub fn is_up_to_date(&mut self) -> bool {
     return self.file_path().exists();
   }
 
-  pub fn sync_original(&mut self) {
+  pub fn perform(&mut self) {
+    self.sync_original();
+
+    let dns = self.app.config.dns();
+    let dhcp = self.create_override(&dns);
+
+    dns.update_config(self.app, dhcp.dns_config());
+  }
+
+  fn sync_original(&mut self) {
     let orig_path = self.original_file_path();
     let read_error_message = format!("Failed to read {:?}", orig_path);
     let orig_file = File::open(*orig_path.clone()).expect(&read_error_message);
@@ -75,9 +84,8 @@ impl DockerCompose<'_> {
     writer.flush().expect(&write_error_message);
   }
 
-  pub fn create_override(&mut self) -> dhcp::Dhcp {
+  fn create_override(&mut self, dns: &dns::Dns) -> dhcp::Dhcp {
     let yaml = docker_compose::load(self.file_path());
-    let dns = self.app.config.dns();
     let mut dhcp = dns.new_dhcp_for(self.app);
 
     let orig_services = yaml.services.unwrap_or(BTreeMap::new());

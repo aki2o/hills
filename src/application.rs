@@ -1,4 +1,4 @@
-mod docker_compose;
+mod synchronizer;
 
 use crate::config::Config;
 use garde::Validate;
@@ -90,26 +90,18 @@ impl Application<'_> {
 
   pub fn update(&self, force: bool) {
     let dir = *self.dist_root();
-    let mut compose = self.docker_compose();
+    let mut synchronizer = synchronizer::new(&self);
 
     if !dir.exists() {
       fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
     }
 
-    if compose.is_up_to_date() && !force {
+    if synchronizer.is_up_to_date() && !force {
       return;
     }
 
     self.clear_dist();
-    compose.sync_original();
-
-    let dhcp = compose.create_override();
-
-    self.config.dns().update_config(self, dhcp.dns_config());
-  }
-
-  fn docker_compose<'a>(&'a self) -> docker_compose::DockerCompose<'a> {
-    return docker_compose::new(&self);
+    synchronizer.perform();
   }
 
   fn clear_dist(&self) {
