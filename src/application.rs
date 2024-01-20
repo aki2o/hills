@@ -60,7 +60,7 @@ repository = ""
 }
 
 fn file_path(conf: &Config, name: &str) -> Box<PathBuf> {
-  return Box::new(conf.app_root().join(format!("{}.toml", name)));
+  return Box::new(conf.app_root().join(format!("{}.toml", conf.resolve(name))));
 }
 
 impl Application<'_> {

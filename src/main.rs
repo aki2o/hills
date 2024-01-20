@@ -22,6 +22,9 @@ enum Actions {
   /// Initialize the configuration file.
   Init,
 
+  /// List applications
+  List,
+
   /// Create a new application configuration file.
   New(NewArgs),
 
@@ -55,6 +58,13 @@ fn main() {
   match cli.action {
     Actions::Init => {
       config::create(root);
+    }
+    Actions::List => {
+      let c = config::load_from(root);
+
+      for name in c.application_names() {
+        println!("{}", name);
+      }
     }
     Actions::New(args) => {
       let c = config::load_from(root);

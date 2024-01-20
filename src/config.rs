@@ -127,6 +127,45 @@ impl Config {
     return dns::new(self.global_values.network_name.as_ref().unwrap().to_string(), self.global_values.subnet.unwrap().clone());
   }
 
+  pub fn application_names(&self) -> Vec<String> {
+    let mut list: Vec<String> = Vec::new();
+
+    for entry in fs::read_dir(*self.app_root()).unwrap() {
+      let entry = entry.unwrap();
+      let path = entry.path();
+
+      if path.is_dir() {
+        continue;
+      }
+
+      let name = path.file_name().unwrap().to_str().unwrap().strip_suffix(".toml");
+
+      if name.is_none() {
+        continue;
+      }
+
+      list.push(name.unwrap().to_string());
+    }
+
+    return list;
+  }
+
+  pub fn resolve(&self, name: &str) -> String {
+    let resolved = match &self.global_values.aliases {
+      Some(aliases) => match aliases.get(name) {
+        Some(v) => v.clone(),
+        None => name.to_string(),
+      },
+      None => name.to_string(),
+    };
+
+    if !self.application_names().contains(&resolved) {
+      panic!("Not found application : {}", name);
+    }
+
+    return resolved;
+  }
+
   pub fn get_alias(&self, original: &str) -> Option<String> {
     match &self.global_values.aliases {
       Some(aliases) => {
