@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
-use hills::application::Application;
-use hills::config::Config;
+use hills::application;
+use hills::config;
 use std::fs;
 use std::path::Path;
 
@@ -54,25 +54,31 @@ fn main() {
 
   match cli.action {
     Actions::Init => {
-      Config::create(root);
+      config::create(root);
     }
     Actions::New(args) => {
-      let c = Config::load_from(root);
+      let c = config::load_from(root);
 
       if !c.app_root().exists() {
         fs::create_dir_all(*c.app_root()).unwrap();
       }
 
-      Application::create(&c, &args.name);
+      application::create(&c, &args.name);
     }
     Actions::Alias(args) => {
-      println!("Alias: {:?}", args);
+      let mut c = config::load_from(root);
+
+      c.set_alias(&args.original, &args.alias);
+
+      if let Some(name) = args.original {
+        application::find_by(&c, &name).update(true);
+      }
     }
     Actions::Update(args) => {
-      let c = Config::load_from(root);
-      let app = Application::find_by(&c, &args.name);
+      let c = config::load_from(root);
+      let app = application::find_by(&c, &args.name);
 
-      app.docker_compose().sync();
+      app.update(false);
 
       c.dns().ensure_docker_compose();
     }

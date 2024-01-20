@@ -4,7 +4,7 @@ use crate::dns;
 use crate::docker_compose;
 use regex::Regex;
 use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::path::PathBuf;
@@ -12,78 +12,27 @@ use std::process::Command;
 
 pub struct DockerCompose<'a> {
   app: &'a Application<'a>,
+  original_hash: Option<String>,
 }
 
 pub fn new<'a>(app: &'a Application<'a>) -> DockerCompose<'a> {
-  return DockerCompose { app: app };
+  return DockerCompose { app: app, original_hash: None };
 }
 
 impl DockerCompose<'_> {
-  pub fn sync(&self) {
-    let dir = *self.dist_root();
-
-    if !dir.exists() {
-      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
-    }
-
-    let new_file = self.sync_original();
-
-    if new_file == None {
-      return;
-    }
-
-    let new_file = *new_file.unwrap();
-
-    fs::read_dir(dir.clone()).expect(&format!("Failed to read {:?}", dir)).for_each(|e| {
-      let path = e.unwrap().path();
-
-      if path.is_file() && path != new_file {
-        fs::remove_file(path.clone()).expect(&format!("Failed to remove {:?}", path));
-      }
-    });
-
-    let dhcp = self.create_override(Box::new(new_file));
-    let dns = self.app.config.dns();
-
-    dns.update_config(self.app, dhcp.dns_config());
+  pub fn is_up_to_date(&mut self) -> bool {
+    return self.file_path().exists();
   }
 
-  fn dist_root(&self) -> Box<PathBuf> {
-    return Box::new(self.app.config.root().join(".dist").join(&self.app.name));
-  }
-
-  fn hash_of(&self, file: Box<PathBuf>) -> String {
-    Command::new("shasum")
-      .arg("-a")
-      .arg("256")
-      .arg(file.as_os_str())
-      .output()
-      .expect(&format!("Failed to execute shasum -a 256 {:?}", file.as_os_str()))
-      .stdout
-      .iter()
-      .map(|&x| x as char)
-      .collect::<String>()
-      .split(" ")
-      .collect::<Vec<&str>>()[0]
-      .to_string()
-  }
-
-  fn sync_original(&self) -> Option<Box<PathBuf>> {
-    let dir = *self.dist_root();
-    let orig_path = self.app.root().join("docker-compose.yml");
-    let orig_hash = self.hash_of(Box::new(orig_path.clone()));
-    let path = dir.join(format!("{}.yml", orig_hash));
-
-    if path.exists() {
-      return None;
-    }
-
+  pub fn sync_original(&mut self) {
+    let orig_path = self.original_file_path();
     let read_error_message = format!("Failed to read {:?}", orig_path);
-    let orig_file = File::open(orig_path.clone()).expect(&read_error_message);
+    let orig_file = File::open(*orig_path.clone()).expect(&read_error_message);
     let lines = io::BufReader::new(orig_file).lines();
 
+    let path = self.file_path();
     let write_error_message = format!("Failed to write {:?}", path);
-    let file = File::create(path.clone()).expect(&write_error_message);
+    let file = File::create(*path.clone()).expect(&write_error_message);
     let mut writer = io::BufWriter::new(file);
 
     let mut on_ports = false;
@@ -124,12 +73,10 @@ impl DockerCompose<'_> {
     }
 
     writer.flush().expect(&write_error_message);
-
-    return Some(Box::new(path));
   }
 
-  fn create_override(&self, file: Box<PathBuf>) -> dhcp::Dhcp {
-    let yaml = docker_compose::load(file);
+  pub fn create_override(&mut self) -> dhcp::Dhcp {
+    let yaml = docker_compose::load(self.file_path());
     let dns = self.app.config.dns();
     let mut dhcp = dns.new_dhcp_for(self.app);
 
@@ -190,8 +137,38 @@ impl DockerCompose<'_> {
       networks: Some(networks),
     };
 
-    yaml.save(Box::new(self.dist_root().join("override.yml")));
+    yaml.save(Box::new(self.app.dist_root().join("override.yml")));
 
     return dhcp;
+  }
+
+  fn original_file_path(&self) -> Box<PathBuf> {
+    return Box::new(self.app.root().join("docker-compose.yml"));
+  }
+
+  fn file_path(&mut self) -> Box<PathBuf> {
+    return Box::new(self.app.dist_root().join(format!("{}.yml", self.original_hash())));
+  }
+
+  fn original_hash(&mut self) -> String {
+    if self.original_hash.is_none() {
+      let v = Command::new("shasum")
+        .arg("-a")
+        .arg("256")
+        .arg(self.original_file_path().as_os_str())
+        .output()
+        .expect(&format!("Failed to execute shasum -a 256 {:?}", self.original_file_path().as_os_str()))
+        .stdout
+        .iter()
+        .map(|&x| x as char)
+        .collect::<String>()
+        .split(" ")
+        .collect::<Vec<&str>>()[0]
+        .to_string();
+
+      self.original_hash = Some(v);
+    }
+
+    return self.original_hash.clone().unwrap();
   }
 }

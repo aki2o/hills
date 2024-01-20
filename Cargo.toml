@@ -15,6 +15,7 @@ regex = "1.10.2"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_with = "3.4.0"
 serde_yaml = "0.9.30"
+tap = "1.0.1"
 toml = "0.8.8"
 
 [dev-dependencies]

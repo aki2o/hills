@@ -124,7 +124,7 @@ impl Dns {
         subnets.insert(key, subnet.clone());
         config::create_file(Box::new(file), toml::to_string(&subnets).unwrap());
 
-        return subnet;
+        subnet
       }
     };
   }
