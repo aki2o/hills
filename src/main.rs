@@ -22,14 +22,14 @@ enum Actions {
   /// Initialize the configuration file.
   Init,
 
-  /// List applications
-  List,
-
   /// Create a new application configuration file.
   New(NewArgs),
 
   /// Create an alias for the application.
   Alias(AliasArgs),
+
+  /// List applications
+  List(ListArgs),
 
   /// Update the application.
   Update(UpdateArgs),
@@ -47,6 +47,11 @@ struct AliasArgs {
 }
 
 #[derive(Args, Debug)]
+struct ListArgs {
+  name: Option<String>,
+}
+
+#[derive(Args, Debug)]
 struct UpdateArgs {
   name: String,
 }
@@ -58,13 +63,6 @@ fn main() {
   match cli.action {
     Actions::Init => {
       config::create(root);
-    }
-    Actions::List => {
-      let c = config::load_from(root);
-
-      for name in c.application_names() {
-        println!("{}", name);
-      }
     }
     Actions::New(args) => {
       let c = config::load_from(root);
@@ -82,6 +80,20 @@ fn main() {
 
       if let Some(name) = args.original {
         application::find_by(&c, &name).update(true);
+      }
+    }
+    Actions::List(args) => {
+      let c = config::load_from(root);
+
+      match &args.name {
+        Some(name) => {
+          application::find_by(&c, name).print();
+        }
+        None => {
+          for name in c.application_names() {
+            println!("{}", name);
+          }
+        }
       }
     }
     Actions::Update(args) => {

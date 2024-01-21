@@ -1,16 +1,16 @@
 use std::path::PathBuf;
-use std::process::Command;
+use std::process;
 // use tap::prelude::*;
 
-pub struct Runner {
+pub struct Command {
   project_name: String,
   project_directory: Box<PathBuf>,
   files: Vec<Box<PathBuf>>,
   parallel: Option<i32>,
 }
 
-pub fn new(name: String, dir: Box<PathBuf>) -> Runner {
-  return Runner {
+pub fn new(name: String, dir: Box<PathBuf>) -> Command {
+  return Command {
     project_name: name,
     project_directory: dir,
     files: vec![],
@@ -18,7 +18,7 @@ pub fn new(name: String, dir: Box<PathBuf>) -> Runner {
   };
 }
 
-impl Runner {
+impl Command {
   pub fn add_file(&mut self, file: Box<PathBuf>) -> &mut Self {
     self.files.push(file);
     return self;
@@ -29,14 +29,12 @@ impl Runner {
     return self;
   }
 
-  pub fn ps(&self) {
-    let mut cmd = self.make_command("ps");
-
-    cmd.spawn().expect(&format!("Failed to run command : {:?}", cmd));
+  pub fn ps(&self) -> Box<process::Command> {
+    return self.make("ps");
   }
 
-  fn make_command(&self, name: &str) -> Box<Command> {
-    let mut cmd = Command::new("docker");
+  fn make(&self, name: &str) -> Box<process::Command> {
+    let mut cmd = process::Command::new("docker");
 
     cmd.arg("compose").arg(name);
     cmd.arg("-p").arg(&self.project_name);

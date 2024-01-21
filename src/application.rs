@@ -1,3 +1,4 @@
+mod runner;
 mod synchronizer;
 
 use crate::config::Config;
@@ -89,11 +90,11 @@ impl Application<'_> {
   }
 
   pub fn update(&self, force: bool) {
-    let dir = *self.dist_root();
+    let dir = self.dist_root();
     let mut synchronizer = synchronizer::new(&self);
 
     if !dir.exists() {
-      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+      fs::create_dir_all(*dir.clone()).expect(&format!("Failed to create {:?}", dir));
     }
 
     if synchronizer.is_up_to_date() && !force {
@@ -104,17 +105,34 @@ impl Application<'_> {
     synchronizer.perform();
   }
 
-  fn clear_dist(&self) {
-    let dir = *self.dist_root();
+  pub fn print(&self) {
+    self.make_runner().ps();
+  }
 
-    if !dir.exists() {
-      return;
+  fn clear_dist(&self) {
+    self.docker_compose_paths().iter().for_each(|p| {
+      fs::remove_file(*p.clone()).expect(&format!("Failed to remove {:?}", p));
+    });
+  }
+
+  fn make_runner(&self) -> Box<runner::Runner> {
+    return Box::new(runner::new(self, self.docker_compose_paths()));
+  }
+
+  fn docker_compose_paths(&self) -> Vec<Box<PathBuf>> {
+    let dir = self.dist_root();
+    let mut list: Vec<Box<PathBuf>> = vec![];
+
+    if dir.exists() {
+      fs::read_dir(*dir.clone()).expect(&format!("Failed to read {:?}", dir)).for_each(|f| {
+        let path = f.unwrap().path();
+
+        if path.is_file() {
+          list.push(Box::new(path));
+        }
+      });
     }
 
-    fs::read_dir(dir.clone()).expect(&format!("Failed to read {:?}", dir)).for_each(|e| {
-      let path = e.unwrap().path();
-
-      fs::remove_file(path.clone()).expect(&format!("Failed to remove {:?}", path));
-    });
+    return list;
   }
 }

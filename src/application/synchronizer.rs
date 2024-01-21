@@ -33,6 +33,18 @@ impl Synchronizer<'_> {
     dns.update_config(self.app, dhcp.dns_config());
   }
 
+  pub fn file_path(&mut self) -> Box<PathBuf> {
+    return Box::new(self.app.dist_root().join(format!("{}.yml", self.original_hash())));
+  }
+
+  pub fn override_file_path(&self) -> Box<PathBuf> {
+    return Box::new(self.app.dist_root().join("override.yml"));
+  }
+
+  fn original_file_path(&self) -> Box<PathBuf> {
+    return Box::new(self.app.root().join("docker-compose.yml"));
+  }
+
   fn sync_original(&mut self) {
     let orig_path = self.original_file_path();
     let read_error_message = format!("Failed to read {:?}", orig_path);
@@ -120,7 +132,7 @@ impl Synchronizer<'_> {
         volumes: None,
         ports: None,
         networks: Some(docker_compose::ServiceNetworkable::Map(nw)),
-        dns: Some(vec![dns.addr(), dns::global_addr()]),
+        dns: Some(vec![dns.addr(), dns.root_addr()]),
         tty: None,
         stdin_open: None,
       };
@@ -145,17 +157,9 @@ impl Synchronizer<'_> {
       networks: Some(networks),
     };
 
-    yaml.save(Box::new(self.app.dist_root().join("override.yml")));
+    yaml.save(self.override_file_path());
 
     return dhcp;
-  }
-
-  fn original_file_path(&self) -> Box<PathBuf> {
-    return Box::new(self.app.root().join("docker-compose.yml"));
-  }
-
-  fn file_path(&mut self) -> Box<PathBuf> {
-    return Box::new(self.app.dist_root().join(format!("{}.yml", self.original_hash())));
   }
 
   fn original_hash(&mut self) -> String {

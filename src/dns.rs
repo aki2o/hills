@@ -11,14 +11,11 @@ use std::path::PathBuf;
 pub struct Dns {
   pub name: String,
   subnet: Ipv4Net,
+  root: Ipv4Addr,
 }
 
-pub fn new(name: String, subnet: Ipv4Net) -> Dns {
-  return Dns { name: name, subnet: subnet };
-}
-
-pub fn global_addr() -> Ipv4Addr {
-  return Ipv4Addr::new(8, 8, 8, 8);
+pub fn new(name: String, subnet: Ipv4Net, root: Ipv4Addr) -> Dns {
+  return Dns { name: name, subnet: subnet, root: root };
 }
 
 pub fn root() -> Box<PathBuf> {
@@ -52,6 +49,10 @@ fn base_config_path() -> Box<PathBuf> {
 impl Dns {
   pub fn addr(&self) -> Ipv4Addr {
     return self.subnet.addr().saturating_add(2);
+  }
+
+  pub fn root_addr(&self) -> Ipv4Addr {
+    return self.root.clone();
   }
 
   pub fn new_dhcp_for(&self, app: &Application) -> dhcp::Dhcp {

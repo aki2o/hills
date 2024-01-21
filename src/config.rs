@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::Write;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 
 pub struct Config {
@@ -25,12 +26,15 @@ struct GlobalValues {
 
 #[derive(Serialize, Deserialize, Validate)]
 struct LocalValues {
-  /// The root domain name of project. It's optional to set if you'd like to make sure the FQDN values are unique in global.
+  /// Root domain name of project. It's optional to set if you'd like to make sure the FQDN values are unique in global.
   #[garde(skip)]
   domain: Option<String>,
-  /// The relative path to applications directory from root.
+  /// Relative path to applications directory from root.
   #[garde(required, length(min = 1))]
   app_root: Option<String>,
+  /// Root dns server address that's formatted with ipv4.
+  #[garde(required)]
+  dns: Option<Ipv4Addr>,
 }
 
 pub fn create_file(f: Box<PathBuf>, s: String) {
@@ -65,6 +69,7 @@ pub fn load_from(root: &Path) -> Config {
 
 pub fn create(root: &Path) {
   let global_dir = global_dir_path();
+  let global_file = global_file_path();
 
   if !global_dir.exists() {
     fs::create_dir_all(*global_dir.clone()).expect(&format!("Failed to create {:?}", global_dir));
@@ -76,11 +81,14 @@ pub fn create(root: &Path) {
     aliases: None,
   };
 
-  create_file(global_file_path(), toml::to_string(&v).unwrap());
+  if !global_file.exists() {
+    create_file(global_file, toml::to_string(&v).unwrap());
+  }
 
   let v = LocalValues {
     domain: Some("".to_string()),
     app_root: Some("applications".to_string()),
+    dns: Some(Ipv4Addr::new(8, 8, 8, 8)),
   };
 
   create_file(local_file_path(root), toml::to_string(&v).unwrap());
@@ -124,7 +132,11 @@ impl Config {
   }
 
   pub fn dns(&self) -> Dns {
-    return dns::new(self.global_values.network_name.as_ref().unwrap().to_string(), self.global_values.subnet.unwrap().clone());
+    return dns::new(
+      self.global_values.network_name.as_ref().unwrap().to_string(),
+      self.global_values.subnet.unwrap().clone(),
+      self.local_values.dns.unwrap().clone(),
+    );
   }
 
   pub fn application_names(&self) -> Vec<String> {
