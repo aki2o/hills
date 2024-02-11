@@ -29,7 +29,7 @@ pub fn root() -> Box<PathBuf> {
 }
 
 fn config_root() -> Box<PathBuf> {
-  let dir = root().join("unbound.conf.d");
+  let dir = config::global_dir_path().join(".dist").join("unbound.conf.d");
 
   if !dir.exists() {
     fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
@@ -105,7 +105,8 @@ impl Dns {
           context: Some(".".to_string()),
           dockerfile: Some("unbound.Dockerfile".to_string()),
         }),
-        volumes: Some(vec!["./unbound.conf.d:/etc/unbound/unbound.conf.d".to_string()]),
+        // TODO: Making the dist path be programmatic
+        volumes: Some(vec!["../.dist/unbound.conf.d:/etc/unbound/unbound.conf.d".to_string()]),
         ports: Some(vec!["53:53".to_string(), "53:53/udp".to_string()]),
         networks: Some(docker_compose::ServiceNetworkable::Map(service_networks)),
         dns: None,

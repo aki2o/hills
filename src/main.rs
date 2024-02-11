@@ -1,6 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 use hills::application;
 use hills::config;
+use hills::vm;
 use std::fs;
 use std::path::Path;
 
@@ -31,8 +32,14 @@ enum Actions {
   /// List applications
   List(ListArgs),
 
+  /// Up the application.
+  Up(UpArgs),
+
   /// Update the application.
   Update(UpdateArgs),
+
+  /// Handle VM.
+  Vm(VmArgs),
 }
 
 #[derive(Args, Debug)]
@@ -52,8 +59,18 @@ struct ListArgs {
 }
 
 #[derive(Args, Debug)]
+struct UpArgs {
+  name: String,
+}
+
+#[derive(Args, Debug)]
 struct UpdateArgs {
   name: String,
+}
+
+#[derive(Args, Debug)]
+struct VmArgs {
+  action: String,
 }
 
 fn main() {
@@ -96,12 +113,35 @@ fn main() {
         }
       }
     }
+    Actions::Up(args) => {
+      if vm::should() && !vm::on() {
+        panic!("You need to run on vm! Please do vm up");
+      }
+      let c = config::load_from(root);
+      let app = application::find_by(&c, &args.name);
+
+      app.update(false);
+    }
     Actions::Update(args) => {
       let c = config::load_from(root);
       let app = application::find_by(&c, &args.name);
 
       app.update(false);
     }
+    Actions::Vm(args) => match args.action.as_str() {
+      "up" => {
+        vm::login();
+      }
+      "down" => {
+        vm::shutdown();
+      }
+      "clean" => {
+        vm::destroy();
+      }
+      _ => {
+        panic!("Invalid action : {}", args.action);
+      }
+    },
   }
 }
 

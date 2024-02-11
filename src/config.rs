@@ -2,6 +2,7 @@ use crate::dns::{self, Dns};
 use garde::Validate;
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::Write;
@@ -14,6 +15,7 @@ pub struct Config {
   local_values: LocalValues,
 }
 
+#[skip_serializing_none]
 #[derive(Serialize, Deserialize, Validate)]
 struct GlobalValues {
   #[garde(required, length(min = 1))]
@@ -22,6 +24,21 @@ struct GlobalValues {
   subnet: Option<Ipv4Net>,
   #[garde(skip)]
   aliases: Option<BTreeMap<String, String>>,
+  #[garde(skip)]
+  lima: Option<LimaValues>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Validate)]
+pub struct LimaValues {
+  #[garde(required)]
+  pub cpus: Option<u32>,
+  #[garde(required)]
+  pub memory: Option<String>,
+  #[garde(required)]
+  pub disk: Option<String>,
+  #[garde(required)]
+  pub ssh_port: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Validate)]
@@ -79,6 +96,12 @@ pub fn create(root: &Path) {
     network_name: Some("hills".to_string()),
     subnet: Some("172.31.0.0/16".parse().unwrap()),
     aliases: None,
+    lima: Some(LimaValues {
+      cpus: Some(2),
+      memory: Some("8GB".to_string()),
+      disk: Some("30GB".to_string()),
+      ssh_port: Some(2222),
+    }),
   };
 
   if !global_file.exists() {
@@ -137,6 +160,10 @@ impl Config {
       self.global_values.subnet.unwrap().clone(),
       self.local_values.dns.unwrap().clone(),
     );
+  }
+
+  pub fn lima(&self) -> &LimaValues {
+    return self.global_values.lima.as_ref().unwrap();
   }
 
   pub fn application_names(&self) -> Vec<String> {
