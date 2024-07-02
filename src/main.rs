@@ -75,56 +75,47 @@ struct VmArgs {
 
 fn main() {
   let cli = Cli::parse();
-  let root = Path::new(&cli.context);
+
+  config::try_to_setup_from(Path::new(&cli.context));
 
   match cli.action {
     Actions::Init => {
       config::create(root);
     }
     Actions::New(args) => {
-      let c = config::load_from(root);
-
-      if !c.app_root().exists() {
-        fs::create_dir_all(*c.app_root()).unwrap();
+      if !config::current().app_root().exists() {
+        fs::create_dir_all(*config::current().app_root()).unwrap();
       }
 
-      application::create(&c, &args.name);
+      application::create(&args.name);
     }
     Actions::Alias(args) => {
-      let mut c = config::load_from(root);
+      config::set_alias(&args.original, &args.alias);
 
-      c.set_alias(&args.original, &args.alias);
-
-      if let Some(name) = args.original {
-        application::find_by(&c, &name).update(true);
-      }
+      // if let Some(name) = args.original {
+      //   application::find_by(&c, &name).update(true);
+      // }
     }
-    Actions::List(args) => {
-      let c = config::load_from(root);
-
-      match &args.name {
-        Some(name) => {
-          application::find_by(&c, name).print();
-        }
-        None => {
-          for name in c.application_names() {
-            println!("{}", name);
-          }
+    Actions::List(args) => match &args.name {
+      Some(name) => {
+        application::find_by(name).print();
+      }
+      None => {
+        for name in config::current().application_names() {
+          println!("{}", name);
         }
       }
-    }
+    },
     Actions::Up(args) => {
       if vm::should() && !vm::on() {
         panic!("You need to run on vm! Please do vm up");
       }
-      let c = config::load_from(root);
-      let app = application::find_by(&c, &args.name);
+      let app = application::find_by(&args.name);
 
       app.update(false);
     }
     Actions::Update(args) => {
-      let c = config::load_from(root);
-      let app = application::find_by(&c, &args.name);
+      let app = application::find_by(&args.name);
 
       app.update(false);
     }

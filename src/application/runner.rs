@@ -10,7 +10,7 @@ pub struct Runner {
 
 pub fn new(app: &Application, files: Vec<Box<PathBuf>>) -> Runner {
   return Runner {
-    name: app.full_name(),
+    name: app.name().to_string(),
     root: app.root(),
     files: files,
   };

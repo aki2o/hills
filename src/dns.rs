@@ -9,44 +9,28 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 pub struct Dns {
-  pub name: String,
+  path: String,
+  name: String,
+  domain: String,
   subnet: Ipv4Net,
   root: Ipv4Addr,
 }
 
-pub fn new(name: String, subnet: Ipv4Net, root: Ipv4Addr) -> Dns {
-  return Dns { name: name, subnet: subnet, root: root };
-}
-
-pub fn root() -> Box<PathBuf> {
-  let dir = config::global_dir_path().join("dns");
-
-  if !dir.exists() {
-    fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
-  }
-
-  return Box::new(dir);
-}
-
-fn config_root() -> Box<PathBuf> {
-  let dir = config::global_dir_path().join(".dist").join("unbound.conf.d");
-
-  if !dir.exists() {
-    fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
-  }
-
-  return Box::new(dir);
-}
-
-fn docker_compose_path() -> Box<PathBuf> {
-  return Box::new(root().join("docker-compose.yml"));
-}
-
-fn base_config_path() -> Box<PathBuf> {
-  return Box::new(config_root().join("base.conf"));
+pub fn new(path: String, name: String, domain: String, subnet: Ipv4Net, root: Ipv4Addr) -> Dns {
+  return Dns {
+    path: path,
+    name: name,
+    domain: domain,
+    subnet: subnet,
+    root: root,
+  };
 }
 
 impl Dns {
+  pub fn domain(&self) -> &str {
+    return self.domain.as_str();
+  }
+
   pub fn addr(&self) -> Ipv4Addr {
     return self.subnet.addr().saturating_add(2);
   }
@@ -60,23 +44,23 @@ impl Dns {
   }
 
   pub fn setup(&self) {
-    if !docker_compose_path().exists() {
+    if !self.docker_compose_path().exists() {
       self.create_docker_compose();
     }
 
-    if !base_config_path().exists() {
+    if !self.base_config_path().exists() {
       self.create_base_config();
     }
   }
 
   pub fn update_config(&self, app: &Application, value: String) {
-    let file = config_root().join(format!("{}.conf", app.full_name()));
+    let file = self.dist_root().join(format!("{}.conf", app.name()));
 
     config::create_file(Box::new(file), value);
   }
 
-  pub fn clear() {
-    let dir = root();
+  pub fn clear(&self) {
+    let dir = self.root();
 
     if dir.exists() {
       fs::remove_dir_all(*dir.clone()).expect(&format!("Failed to remove {:?}", dir));
@@ -130,7 +114,7 @@ impl Dns {
       networks: Some(networks),
     };
 
-    yaml.save(docker_compose_path());
+    yaml.save(self.docker_compose_path());
   }
 
   fn create_base_config(&self) {
@@ -147,12 +131,12 @@ impl Dns {
 "#
     .to_string();
 
-    config::create_file(base_config_path(), s);
+    config::create_file(self.base_config_path(), s);
   }
 
   fn find_or_create_subnet_for(&self, app: &Application) -> Ipv4Net {
-    let file = root().join("subnets.toml");
-    let key = app.full_name();
+    let file = self.root().join("subnets.toml");
+    let key = app.name();
     let mut subnets: BTreeMap<String, Ipv4Net> = BTreeMap::new();
 
     if file.exists() {
@@ -176,5 +160,33 @@ impl Dns {
         subnet
       }
     };
+  }
+
+  fn docker_compose_path(&self) -> Box<PathBuf> {
+    return Box::new(self.root().join("docker-compose.yml"));
+  }
+
+  fn base_config_path(&self) -> Box<PathBuf> {
+    return Box::new(self.dist_root().join("base.conf"));
+  }
+
+  fn root(&self) -> Box<PathBuf> {
+    let dir = config::current().root().join(self.path);
+
+    if !dir.exists() {
+      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+    }
+
+    return Box::new(dir);
+  }
+
+  fn dist_root(&self) -> Box<PathBuf> {
+    let dir = config::current().dist_root().join("unbound.conf.d");
+
+    if !dir.exists() {
+      fs::create_dir_all(dir.clone()).expect(&format!("Failed to create {:?}", dir));
+    }
+
+    return Box::new(dir);
   }
 }

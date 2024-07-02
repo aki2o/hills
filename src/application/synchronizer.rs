@@ -1,4 +1,5 @@
 use crate::application::Application;
+use crate::config;
 use crate::dhcp;
 use crate::dns;
 use crate::docker_compose;
@@ -10,16 +11,16 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::Command;
 
-pub struct Synchronizer<'a> {
-  app: &'a Application<'a>,
+pub struct Synchronizer {
+  app: &Application,
   original_hash: Option<String>,
 }
 
-pub fn new<'a>(app: &'a Application<'a>) -> Synchronizer<'a> {
+pub fn new(app: &Application) -> Synchronizer {
   return Synchronizer { app: app, original_hash: None };
 }
 
-impl Synchronizer<'_> {
+impl Synchronizer {
   pub fn is_up_to_date(&mut self) -> bool {
     return self.file_path().exists();
   }
@@ -27,7 +28,7 @@ impl Synchronizer<'_> {
   pub fn perform(&mut self) {
     self.sync_original();
 
-    let dns = self.app.config.dns();
+    let dns = config::current().dns();
     let dhcp = self.create_override(&dns);
 
     dns.update_config(self.app, dhcp.dns_config());

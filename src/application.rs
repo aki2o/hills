@@ -1,16 +1,15 @@
 mod runner;
 mod synchronizer;
 
-use crate::config::Config;
+use crate::config;
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 
-pub struct Application<'a> {
+pub struct Application {
   pub name: String,
-  pub config: &'a Config,
   values: Values,
 }
 
@@ -23,12 +22,12 @@ struct Values {
   repository: Option<String>,
 }
 
-pub fn is_exists(conf: &Config, name: &str) -> bool {
-  return file_path(conf, name).exists();
+pub fn is_exists(name: &str) -> bool {
+  return file_path(name).exists();
 }
 
-pub fn find_by<'a>(conf: &'a Config, name: &str) -> Application<'a> {
-  let f = file_path(conf, name);
+pub fn find_by(name: &str) -> Application {
+  let f = file_path(name);
   let s = fs::read_to_string(*f.clone()).expect(&format!("Failed to read {:?}", f));
   let v: Values = toml::from_str(&s).expect(&format!("Failed to load config from {:?}", f));
 
@@ -36,15 +35,11 @@ pub fn find_by<'a>(conf: &'a Config, name: &str) -> Application<'a> {
     panic!("Invalid application {name} : {e}");
   }
 
-  return Application {
-    name: name.to_string(),
-    config: conf,
-    values: v,
-  };
+  return Application { name: name.to_string(), values: v };
 }
 
-pub fn create(conf: &Config, name: &str) {
-  let f = file_path(conf, name);
+pub fn create(name: &str) {
+  let f = file_path(name);
   let mut fs = File::create(*f).unwrap();
   write!(fs, "{}", template()).unwrap();
   fs.flush().unwrap();
@@ -60,33 +55,29 @@ repository = ""
   .to_string();
 }
 
-fn file_path(conf: &Config, name: &str) -> Box<PathBuf> {
-  return Box::new(conf.app_root().join(format!("{}.toml", conf.resolve(name))));
+fn file_path(name: &str) -> Box<PathBuf> {
+  let c = config::current();
+
+  return Box::new(c.app_root().join(format!("{}.toml", c.resolve(name))));
 }
 
-impl Application<'_> {
+impl Application {
   pub fn root(&self) -> Box<PathBuf> {
-    return Box::new(self.config.root().join(&self.values.path.as_ref().unwrap()));
+    return Box::new(config::current().root().join(&self.values.path.as_ref().unwrap()));
   }
 
   pub fn dist_root(&self) -> Box<PathBuf> {
-    return Box::new(self.config.root().join(".dist").join(&self.name));
+    return Box::new(config::current().root().join(".dist").join(&self.name));
   }
 
-  pub fn full_name(&self) -> String {
-    match self.config.domain() {
-      Some(parent) => format!("{}-{}", parent, self.name.as_str()),
-      None => self.name.clone(),
-    }
+  pub fn name(&self) -> &str {
+    return self.name.as_str();
   }
 
   pub fn domain(&self) -> String {
-    let name = self.config.get_alias(self.name.as_str()).unwrap_or(self.name.clone());
+    let name = config::current().get_alias(self.name.as_str()).unwrap_or(self.name.clone());
 
-    match self.config.domain() {
-      Some(parent) => format!("{}.{}", name.as_str(), parent),
-      None => name,
-    }
+    return format!("{}.{}", name.as_str(), config::current().dns().domain());
   }
 
   pub fn update(&self, force: bool) {
